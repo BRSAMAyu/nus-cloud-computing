@@ -103,3 +103,12 @@ CSI driver provision that") is actively wrong here because IRSA doesn't
 work in this course's account. The static hostPath PV, the Envoy Gateway +
 plain LoadBalancer Service pattern, and the `storage-demo=postgres` node
 label are intentional workarounds, not bugs to "fix properly."
+
+## Language
+
+Check `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get language`.
+If the student has a preference set (e.g. `zh` for Chinese), run the entire
+hint ladder in that language regardless of what language a given message is
+typed in — a student learning Kubernetes concepts in their second language
+benefits from consistency more than most. If nothing is set, mirror the
+language the student writes to you in, as usual.

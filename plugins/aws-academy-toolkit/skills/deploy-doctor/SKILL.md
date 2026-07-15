@@ -96,3 +96,10 @@ their own.
 If `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/academy_k8s_lint.py" ...`
 fails with "command not found", retry with `python` instead — some Windows
 installs only expose one of the two.
+
+## Language
+
+Check `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get language`.
+If set, use that language for the whole review/fix conversation regardless
+of what language a given message is typed in; otherwise mirror the team's
+own language as usual.

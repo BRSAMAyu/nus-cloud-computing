@@ -52,7 +52,7 @@ which is the same for the whole class but only resolves to a real lab once
 the student is logged into Canvas in their own browser. Check for it first:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get course_url
 ```
 
 If empty, ask the student to paste their course's "Launch AWS Academy
@@ -60,11 +60,21 @@ Learner Lab" URL (the Canvas modules/items link they'd normally click), then
 save it:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" set "<url>"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" set course_url "<url>"
 ```
 
 This is stored in the student's home directory
-(`~/.config/nus-cloud-lab/config.json`), never inside any git repo.
+(`~/.config/nus-cloud-computing/config.json`), never inside any git repo.
+
+## Language
+
+Check `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get language`.
+If the student has set a preference (e.g. `zh` for Chinese), respond in that
+language throughout this skill regardless of what language a given message
+happens to be typed in. If nothing is set, just mirror the language the
+student writes to you in, as you normally would — no special handling
+needed. Never assume English by default; this course has students more
+comfortable in Chinese.
 
 ## Workflow 0 (primary) — browser-assisted start + credential refresh
 

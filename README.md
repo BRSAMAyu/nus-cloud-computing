@@ -31,7 +31,22 @@ Inside Claude Code:
 ```
 
 After installing, the three skills below are available in any directory
-you run `claude` in.
+you run `claude` in. The first time you open Claude Code afterward, a
+one-time orientation message explains the three skills and first-run
+setup — it never repeats after that.
+
+### Language
+
+Every skill defaults to mirroring whatever language you type in, same as
+Claude normally does — no setup needed. If you'd rather all three skills
+always respond in one language regardless of what you happen to type in a
+given message (e.g. you want consistent Chinese explanations), set it once:
+
+```
+python3 "<plugin path>/scripts/aws-lab/lab_config.py" set language zh
+```
+
+(Ask Claude to run this for you — it'll resolve `<plugin path>` correctly.)
 
 ### Recommended: connect Claude in Chrome
 
@@ -46,8 +61,8 @@ everything else works the same either way.
 
 The first time you use `aws-lab-ops`, it'll ask for your course's "Launch
 AWS Academy Learner Lab" URL (the Canvas modules/items link). It's saved
-locally at `~/.config/nus-cloud-lab/config.json` — never committed anywhere,
-never shared between students.
+locally at `~/.config/nus-cloud-computing/config.json` — never committed
+anywhere, never shared between students.
 
 ## What's in the plugin
 
@@ -98,7 +113,8 @@ Plain Python 3 (stdlib only — no pip installs), shells out to
 | Script | Purpose |
 |---|---|
 | `common.py` | shared AWS CLI wrapper + retry/backoff helpers |
-| `lab_config.py` | stores the student's course URL locally |
+| `lab_config.py` | stores the student's course URL and language preference locally |
+| `onboarding_hook.py` | SessionStart hook: shows the one-time orientation message, then never again |
 | `refresh_credentials.py` | validates and writes a pasted/extracted credential block, verifies it |
 | `bootstrap_eks.py` | idempotently (re)creates `MyEKS` + `MyEKSGroup` + ECR repos from a bare account |
 | `verify_eks.py` | cross-platform health check (credentials, cluster, security group, kubectl, helm) |
