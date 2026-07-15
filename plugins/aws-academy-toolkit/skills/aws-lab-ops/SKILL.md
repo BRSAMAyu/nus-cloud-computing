@@ -193,3 +193,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/teardown_eks.py" --yes    # after
 All scripts are plain Python 3 (stdlib only, no pip installs) and shell out
 to `aws`/`kubectl`/`helm` on PATH — they run identically on Windows and
 macOS. `${CLAUDE_PLUGIN_ROOT}` resolves correctly on both.
+
+Some Windows Python installs only expose `python`, not `python3` (and vice
+versa on some Linux setups only `python3` exists). If a `python3 ...`
+invocation fails with "command not found", retry the identical command with
+`python` before concluding something is actually broken.

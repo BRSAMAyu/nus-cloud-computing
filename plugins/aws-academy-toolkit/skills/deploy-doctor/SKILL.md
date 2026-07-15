@@ -90,3 +90,9 @@ hint ladder. Still explain *why* something failed when you fix it (in terms
 of the actual AWS/Kubernetes mechanism), since that's the whole point of
 doing this course and the team will hit the same class of issue again on
 their own.
+
+## Cross-platform note
+
+If `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/academy_k8s_lint.py" ...`
+fails with "command not found", retry with `python` instead — some Windows
+installs only expose one of the two.

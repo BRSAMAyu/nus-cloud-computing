@@ -10,6 +10,17 @@ tooling needs to be available in *every* project directory a student opens
 — this term's labs, next term's labs, a group project folder — not just one
 specific lab checkout.
 
+## Prerequisites
+
+- A reasonably recent Claude Code CLI — run `claude update` first if you
+  haven't updated in a while; the plugin marketplace commands used below
+  need a version that supports `/plugin`.
+- `python3` (or `python`) on PATH. Scripts try `python3` first and fall back
+  to `python` automatically — some Windows installs only expose one of the
+  two, some Linux setups only the other.
+- `git`, AWS CLI v2, `kubectl`, `helm` — same prerequisites the labs
+  themselves already require.
+
 ## Install (students, one-time per machine)
 
 Inside Claude Code:
