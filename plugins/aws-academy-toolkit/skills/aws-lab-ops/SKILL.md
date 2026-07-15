@@ -142,8 +142,8 @@ below relies on.
    ```bash
    printf '%s' "$EXTRACTED_BLOCK" | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/refresh_credentials.py"
    ```
-   Report the resolved account ID, remaining session time, and budget used
-   — never the raw secret values.
+   Then continue to Workflow 1b below (reattach the node security group) —
+   don't skip it just because credentials came from the automated path.
 7. **If step 5 fails at any point** (paste comes back empty, doesn't
    validate, or any sub-step errors) — **this is one bounded attempt, not
    a chain to keep escalating.** Don't fall back to screenshot OCR, don't
@@ -176,7 +176,28 @@ credential capture is always a manual paste, for the reasons above.
    pass the path as an argument). The script validates the block, backs up
    any existing `~/.aws/credentials`, writes the new one, and confirms with
    `aws sts get-caller-identity`.
-4. Report the resolved account ID — not the raw secret values.
+4. Continue to Workflow 1b below — don't stop here.
+
+## Workflow 1b — reattach the node security group (every session, not optional)
+
+Run this immediately after Workflow 0 or Workflow 1 succeeds, every single
+time, even if it was attached last session:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/attach_myeksgroup_to_nodes.py"
+```
+
+This is transcribed directly from this course's own AWS-Setup-TUT1.pdf,
+which explicitly warns: **"Security group needs to be changed when starting
+a new session."** AWS Academy can swap out the underlying EC2 instances
+between sessions without touching the EKS cluster or node group objects, so
+a node that had `MyEKSGroup` attached last session may be a different
+instance now, without it — silently breaking NodePort/curl access to
+anything the student deployed, in a way that looks like a Kubernetes bug
+but isn't. The script is idempotent (skips nodes that already have it), so
+running it every time costs nothing when nothing changed. Report the
+resolved account ID — not the raw secret values — once both this and
+credential refresh are done.
 
 ## Is there an official API instead of the browser entirely?
 
@@ -208,13 +229,24 @@ The script is idempotent — safe to re-run if it fails partway (a
 retried automatically; see the reference doc). It:
 
 1. Pre-creates the ELB service-linked role to dodge the first-LoadBalancer race.
-2. Finds the default VPC/subnets and tags them for the in-tree LB controller.
-3. Creates/verifies `MyEKSGroup` (inbound HTTP 80 from anywhere).
-4. Creates the `MyEKS` cluster and a 2-node managed node group, both using
-   `LabRole` (the only IAM role Academy allows) — no custom IAM role, no
-   OIDC/IRSA setup.
-5. Opens the NodePort range from `MyEKSGroup` into the cluster's node
-   security group (needed for the Gateway/LoadBalancer path in L2-L4).
+2. Finds the default VPC/subnets and tags them for the in-tree LB controller
+   (needed for the Gateway/LoadBalancer path in L2-L4; this base tutorial
+   itself doesn't use a load balancer, but the later labs do).
+3. Creates/verifies `MyEKSGroup` — **All TCP, port range 0-65535, from
+   0.0.0.0/0** (not just port 80 — transcribed exactly from this course's
+   AWS-Setup-TUT1.pdf, description text "Allow all HTTP requests" despite
+   covering all ports).
+4. Creates the `MyEKS` cluster (custom configuration, not EKS Auto Mode)
+   and the `MyEKS-nodegroup` managed node group (2x `t3.medium`, 20 GiB
+   disk, on-demand, default AMI), both using `LabRole` (the only IAM role
+   Academy allows) — no custom IAM role, no OIDC/IRSA setup. Every field
+   here matches the tutorial's own console screenshots exactly; anything
+   the tutorial doesn't mention changing (Kubernetes version, AMI type,
+   cluster authentication mode) is left at whatever AWS currently defaults
+   to, not hardcoded.
+5. Attaches `MyEKSGroup` directly to each worker node's primary network
+   interface (see Workflow 1b — this step also reruns standalone every
+   session, not just during bootstrap).
 6. Creates the `guestbook-frontend` / `guestbook-backend` ECR repos.
 7. Updates the local kubeconfig and labels one node `storage-demo=postgres`
    for the L3/L4 storage lab.
@@ -229,10 +261,11 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/verify_eks.py"
 ```
 
 Cross-platform (macOS/Windows) check: credentials valid, cluster ACTIVE,
-security group exists, kubectl can list nodes, helm works. Report the first
-failing check plainly rather than the raw AWS CLI error — translate it
-using the reference doc when the cause is an Academy-specific restriction
-rather than a real bug.
+security group exists **and is actually attached to every current node**
+(a `[WARN]` here means run Workflow 1b, not that something is broken),
+kubectl can list nodes, helm works. Report the first failing check plainly
+rather than the raw AWS CLI error — translate it using the reference doc
+when the cause is an Academy-specific restriction rather than a real bug.
 
 ## Workflow 4 — tear down (stop paying for it)
 

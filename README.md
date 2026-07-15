@@ -148,7 +148,8 @@ Plain Python 3 (stdlib only — no pip installs), shells out to
 | `onboarding_hook.py` | SessionStart hook: one-time welcome + injects saved config every session for all 3 skills |
 | `refresh_credentials.py` | validates and writes a pasted/extracted credential block, verifies it |
 | `bootstrap_eks.py` | idempotently (re)creates `MyEKS` + `MyEKSGroup` + ECR repos from a bare account |
-| `verify_eks.py` | cross-platform health check (credentials, cluster, security group, kubectl, helm) |
+| `attach_myeksgroup_to_nodes.py` | (re)attaches `MyEKSGroup` to every current node's primary network interface — must rerun every session |
+| `verify_eks.py` | cross-platform health check (credentials, cluster, security group + its node attachment, kubectl, helm) |
 | `teardown_eks.py` | deletes the node group, cluster, and any orphaned Kubernetes-created load balancers |
 | `academy_k8s_lint.py` | scans a project's YAML/Terraform for Academy-incompatible patterns |
 

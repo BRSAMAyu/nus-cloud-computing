@@ -71,13 +71,23 @@ This is the load-bearing trick that makes L2–L4's EKS variants work at all:
 - This is why the course's Gateway API implementation (Envoy Gateway) needs no
   AWS Load Balancer Controller install: Envoy Gateway just creates a plain
   `type: LoadBalancer` Service, and the in-tree controller does the rest.
-- Because there's no AWS Load Balancer Controller, the BYO-security-group
-  annotation (`service.beta.kubernetes.io/aws-load-balancer-security-groups`)
-  is **not guaranteed to auto-manage the worker node security group's
-  ingress rule** the way the modern controller does. Don't assume it's wired
-  automatically — explicitly (and idempotently) authorize inbound TCP
-  30000-32767 on the node/cluster security group from `MyEKSGroup`'s ID as a
-  bootstrap step.
+- Because there's no AWS Load Balancer Controller, `MyEKSGroup` isn't wired
+  in through the modern BYO-security-group annotation mechanism at all.
+  Per this course's own AWS-Setup-TUT1.pdf, the actual mechanism is
+  simpler and more direct: `MyEKSGroup` (All TCP 0-65535 from `0.0.0.0/0`)
+  is attached straight onto each worker node's **primary network
+  interface**, alongside the cluster's own `eks-cluster-sg-*` security
+  group — not layered in via an ELB annotation or an SG-to-SG rule. This
+  is also how the course's basic NodePort case study (curl a node's public
+  IP on its NodePort directly, no load balancer at all) gets its inbound
+  access.
+- **This attachment does not persist across sessions.** The tutorial
+  explicitly warns "security group needs to be changed when starting a new
+  session" — AWS Academy can swap the underlying EC2 instances between
+  sessions without touching the EKS cluster/node group objects, so a node
+  that had `MyEKSGroup` last session may be a different instance now,
+  silently missing it. Re-attach every session, not just once after
+  cluster creation.
 - Subnets must be tagged for the in-tree controller to pick them for a
   public-facing LB, and default/manually-created VPCs are not tagged this way
   by default:
@@ -106,10 +116,24 @@ This is the load-bearing trick that makes L2–L4's EKS variants work at all:
 
 ## Known-good resource names (this course)
 
-- EKS cluster: `MyEKS`, region `us-east-1`.
-- Security group: `MyEKSGroup` — inbound TCP 80 from `0.0.0.0/0`; its ID
-  (`sg-...`, not the name) is what gets used in the
-  `aws-load-balancer-security-groups` annotation.
+Transcribed field-by-field from this course's own AWS-Setup-TUT1.pdf
+(console screenshots) — treat this as ground truth over generic EKS advice.
+Anything the tutorial doesn't explicitly change is left at whatever AWS
+currently offers as the default (Kubernetes version, AMI type, cluster
+authentication mode) rather than hardcoded to a specific value that will
+drift out of date.
+
+- EKS cluster: `MyEKS`, region `us-east-1`, Cluster IAM role `LabRole`,
+  **Custom configuration** (not EKS Auto Mode), cluster access "Allow
+  cluster administrator access" + "EKS API and ConfigMap".
+- Node group: `MyEKS-nodegroup`, node IAM role `LabRole`, capacity type
+  On-Demand, instance type `t3.medium`, disk size 20 GiB, 2 nodes.
+- Security group: `MyEKSGroup`, description "Allow all HTTP requests",
+  inbound rule **All TCP, port range 0-65535, source `0.0.0.0/0`** — not
+  just port 80, despite the description text. Attached directly to each
+  worker node's primary network interface (device index 0), alongside the
+  cluster's own `eks-cluster-sg-*` group — re-attached every session (see
+  above), not wired through an ELB annotation.
 - ECR repositories: `guestbook-frontend`, `guestbook-backend` (one-time
   create per account, safe to skip if already present).
 - IAM role for everything: `LabRole` (both `--role-arn` at cluster creation

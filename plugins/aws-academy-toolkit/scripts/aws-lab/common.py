@@ -21,11 +21,13 @@ import time
 REGION = "us-east-1"
 CLUSTER_NAME = "MyEKS"
 SECURITY_GROUP_NAME = "MyEKSGroup"
-NODEGROUP_NAME = "MyEKSNodes"
+# Matches this course's own AWS-Setup-TUT1.pdf exactly — a student who
+# already followed that tutorial by hand has a node group with this literal
+# name, and attach_myeksgroup_to_nodes.py filters instances by it.
+NODEGROUP_NAME = "MyEKS-nodegroup"
 ECR_REPOS = ["guestbook-frontend", "guestbook-backend"]
 NODE_INSTANCE_TYPE = "t3.medium"
 NODE_COUNT = 2
-NODEPORT_RANGE = (30000, 32767)
 
 
 class LabCliError(RuntimeError):

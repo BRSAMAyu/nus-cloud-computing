@@ -6,8 +6,16 @@ Every step is idempotent: re-running this script after a partial failure, or
 against an account that already has some pieces, only creates what's
 missing. Read references/academy-eks-limits.md first if you're touching this
 script — every non-obvious step here (LabRole reuse, the service-linked-role
-retry, the subnet tags, the NodePort security group rule) exists because of a
-specific Academy restriction documented there.
+retry, the subnet tags) exists because of a specific Academy restriction
+documented there.
+
+Security group config and the node-ENI-attachment step are transcribed
+directly from this course's own AWS-Setup-TUT1.pdf: MyEKSGroup allows All
+TCP 0-65535 from anywhere (not just port 80), and is attached directly to
+each worker node's primary network interface, not wired through the
+cluster's own security group. That attachment step also runs every time
+this script executes (not just once), because the PDF documents that AWS
+Academy can swap out node instances between sessions.
 
 Usage:
     python3 bootstrap_eks.py            # create/repair everything
@@ -21,13 +29,13 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from attach_myeksgroup_to_nodes import attach_to_all_nodes  # noqa: E402
 from common import (  # noqa: E402
     CLUSTER_NAME,
     ECR_REPOS,
     NODE_COUNT,
     NODE_INSTANCE_TYPE,
     NODEGROUP_NAME,
-    NODEPORT_RANGE,
     REGION,
     SECURITY_GROUP_NAME,
     LabCliError,
@@ -102,7 +110,7 @@ def tag_subnets_for_elb(subnet_ids: list[str]):
 
 
 def ensure_security_group(vpc_id: str) -> str:
-    step(f"Ensuring security group {SECURITY_GROUP_NAME} (inbound HTTP 80 from anywhere)")
+    step(f"Ensuring security group {SECURITY_GROUP_NAME} (All TCP 0-65535 from anywhere, per AWS-Setup-TUT1.pdf)")
     existing = run_aws_json([
         "ec2", "describe-security-groups",
         "--filters", f"Name=group-name,Values={SECURITY_GROUP_NAME}", f"Name=vpc-id,Values={vpc_id}",
@@ -116,7 +124,7 @@ def ensure_security_group(vpc_id: str) -> str:
             return "sg-dryrun"
         created = run_aws_json([
             "ec2", "create-security-group", "--group-name", SECURITY_GROUP_NAME,
-            "--description", "Course lab: inbound HTTP for the guestbook load balancer",
+            "--description", "Allow all HTTP requests",
             "--vpc-id", vpc_id,
         ])
         sg_id = created["GroupId"]
@@ -126,9 +134,9 @@ def ensure_security_group(vpc_id: str) -> str:
         try:
             run_aws([
                 "ec2", "authorize-security-group-ingress", "--group-id", sg_id,
-                "--protocol", "tcp", "--port", "80", "--cidr", "0.0.0.0/0",
+                "--protocol", "tcp", "--port", "0-65535", "--cidr", "0.0.0.0/0",
             ])
-            log("authorized inbound tcp/80 from 0.0.0.0/0")
+            log("authorized inbound All TCP (0-65535) from 0.0.0.0/0")
         except LabCliError as exc:
             if "InvalidPermission.Duplicate" in str(exc):
                 log("inbound rule already present")
@@ -214,29 +222,17 @@ def ensure_nodegroup(subnet_ids: list[str], account_id: str):
     log("node group is ACTIVE")
 
 
-def authorize_nodeport_from_lb_sg(my_eks_group_id: str):
-    step("Authorizing NodePort traffic from MyEKSGroup into the cluster's node security group")
+def attach_security_group_to_nodes():
+    step("Attaching MyEKSGroup to each worker node's primary network interface")
     if DRY_RUN:
-        log("[dry-run] would look up the cluster security group and open NodePort range from MyEKSGroup")
+        log("[dry-run] would attach MyEKSGroup to every running MyEKS node's primary ENI")
         return
-    cluster_sg = run_aws_json(["eks", "describe-cluster", "--name", CLUSTER_NAME])[
-        "cluster"]["resourcesVpcConfig"]["clusterSecurityGroupId"]
-    low, high = NODEPORT_RANGE
     try:
-        run_aws([
-            "ec2", "authorize-security-group-ingress", "--group-id", cluster_sg,
-            "--protocol", "tcp", "--port", f"{low}-{high}",
-            "--source-group", my_eks_group_id,
-        ])
-        log(f"authorized tcp/{low}-{high} from {my_eks_group_id} into {cluster_sg}")
+        already, newly = attach_to_all_nodes()
+        log(f"{already} node(s) already had it, {newly} node(s) newly attached")
     except LabCliError as exc:
-        if "InvalidPermission.Duplicate" in str(exc):
-            log("rule already present")
-        else:
-            # Not fatal: the legacy controller may already manage this itself.
-            # Surface it, but let the rest of bootstrap continue.
-            log(f"WARNING: could not confirm/add the NodePort rule automatically: {exc}")
-            log("If the load balancer returns nothing once deployed, add this rule manually.")
+        log(f"WARNING: could not attach MyEKSGroup to nodes automatically: {exc}")
+        log("Run attach_myeksgroup_to_nodes.py again once the node group is ACTIVE.")
 
 
 def ensure_ecr_repos():
@@ -297,8 +293,7 @@ def main():
     my_eks_group_id = ensure_security_group(vpc_id)
     ensure_cluster(subnet_ids, account_id)
     ensure_nodegroup(subnet_ids, account_id)
-    if not DRY_RUN:
-        authorize_nodeport_from_lb_sg(my_eks_group_id)
+    attach_security_group_to_nodes()
     ensure_ecr_repos()
     update_kubeconfig()
     label_storage_node()

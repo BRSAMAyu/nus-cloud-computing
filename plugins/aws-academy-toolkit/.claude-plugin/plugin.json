@@ -1,7 +1,7 @@
 {
   "name": "aws-academy-toolkit",
   "displayName": "AWS Academy Cloud Lab Toolkit",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "AWS Academy Learner Lab session/credential automation + EKS rebuild, Socratic lab tutor, and group-project EKS compatibility checker for the NUS cloud computing course.",
   "author": {
     "name": "NUS Cloud Computing Lab"

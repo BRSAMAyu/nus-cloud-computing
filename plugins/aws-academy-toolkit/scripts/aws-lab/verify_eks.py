@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from attach_myeksgroup_to_nodes import find_node_instance_ids, primary_eni_id  # noqa: E402
 from common import CLUSTER_NAME, SECURITY_GROUP_NAME, LabCliError, check_credentials, fail, log, run_aws_json  # noqa: E402
 
 
@@ -44,7 +45,29 @@ def main():
                          "--filters", f"Name=group-name,Values={SECURITY_GROUP_NAME}"])["SecurityGroups"]
     if not sgs:
         fail(f"Security group '{SECURITY_GROUP_NAME}' was not found.")
-    log(f"[PASS] security group {SECURITY_GROUP_NAME} exists ({sgs[0]['GroupId']})")
+    sg_id = sgs[0]["GroupId"]
+    log(f"[PASS] security group {SECURITY_GROUP_NAME} exists ({sg_id})")
+
+    # AWS Academy can swap out node instances between sessions (per this
+    # course's own AWS-Setup-TUT1.pdf), so a security group that was
+    # attached last session may be missing from this session's actual
+    # nodes. This is a read-only check — it doesn't fix anything, just
+    # tells the caller whether attach_myeksgroup_to_nodes.py needs a rerun.
+    try:
+        instance_ids = find_node_instance_ids()
+        missing = []
+        for instance_id in instance_ids:
+            eni_id = primary_eni_id(instance_id)
+            eni = run_aws_json(["ec2", "describe-network-interfaces", "--network-interface-ids", eni_id])["NetworkInterfaces"][0]
+            if sg_id not in [g["GroupId"] for g in eni["Groups"]]:
+                missing.append(instance_id)
+        if missing:
+            log(f"[WARN] {SECURITY_GROUP_NAME} is NOT attached to {len(missing)} node(s): {missing}")
+            log("       Run attach_myeksgroup_to_nodes.py to fix this before relying on NodePort access.")
+        else:
+            log(f"[PASS] {SECURITY_GROUP_NAME} is attached to all {len(instance_ids)} current node(s)")
+    except LabCliError as exc:
+        log(f"[WARN] could not check node security group attachment: {exc}")
 
     subprocess.run(["aws", "eks", "update-kubeconfig", "--name", CLUSTER_NAME, "--region", "us-east-1"],
                     capture_output=True, check=True)
