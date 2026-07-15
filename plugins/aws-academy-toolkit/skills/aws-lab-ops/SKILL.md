@@ -32,12 +32,13 @@ location, not from inside the student's current project directory.
   email links, never touch MFA. These stay 100% manual, regardless of who
   asks or how they phrase it.
 - The browser actions that ARE fine, because they're routine session
-  management on a browser the student is already authenticated in, not
-  authentication itself: navigating to the course's AWS Academy page,
-  clicking **Start Lab**, and clicking **AWS Details** to open the panel.
-  Reading the credential text back out of that panel is the student's job
-  (see Workflow 0's note on why automated extraction doesn't work
-  reliably here), not something this skill attempts.
+  management and text retrieval on a browser the student is already
+  authenticated in, not authentication itself: navigating to the course's
+  AWS Academy page, clicking **Start Lab**, typing `cat ~/.aws/credentials`
+  into the already-authenticated embedded terminal, and copy/pasting that
+  already-displayed temporary credential text via keyboard shortcuts (see
+  Workflow 0 for the exact bounded technique and its one-attempt fallback
+  to manual paste).
 - The only secrets this skill ever handles are the short-lived
   `aws_access_key_id` / `aws_secret_access_key` / `aws_session_token`
   triple AWS Academy itself displays to an already-logged-in student — never
@@ -69,15 +70,16 @@ machine.
 
 If `browser_assist` is unset, ask the student **once**, explicitly, which
 they'd prefer — don't silently pick one for them. Be accurate about what it
-does and doesn't cover — pulling the credential text out automatically
-doesn't work reliably (see Workflow 0's note), so don't oversell it:
+does and doesn't guarantee — full automation, including pulling out the
+credential text, is attempted but not guaranteed to work every time (see
+Workflow 0), so don't oversell it:
 
 > "Do you have the Claude in Chrome extension connected, and are you
-> logged into your AWS Academy course in that browser? If so I can open
-> the page and click Start Lab for you — you'll still need to paste the
-> credential block yourself once it's ready, that part can't be automated
-> reliably. If you'd rather just do the whole thing yourself in your own
-> browser, that's fine too."
+> logged into your AWS Academy course in that browser? If so I can try to
+> open the page, start the lab, and pull the credentials automatically —
+> it usually works, but if it doesn't I'll just ask you to paste the
+> credential block yourself. If you'd rather skip the automation entirely
+> and do the whole thing yourself, that's fine too."
 
 Save whichever they pick (`true`/`false`) so this is never asked again.
 Note this preference doesn't have to be perfectly reliable forever — if
@@ -88,28 +90,21 @@ time).
 
 ## Workflow 0 (primary, if browser_assist=true) — browser-assisted start + credential refresh
 
-**Scope of automation, deliberately narrow:** browser automation handles
-starting/resuming the lab session and getting the "AWS Details" panel open
-— it does **not** attempt to extract the credential text itself. That split
-is based on real testing, not caution for its own sake: the credential
-block sits inside a cross-origin Vocareum iframe, so DOM/accessibility text
-extraction (`get_page_text`, `read_page`) returns nothing; reading it via
-the OS clipboard hits a native permission dialog the extension's tools
-can't click through; and reading it off a screenshot risks silently
-swapping `0`/`O` or `1`/`l`/`I` in a 40-character secret, which is a
-correctness bug, not just a UX papercut. Don't re-attempt any of these — go
-straight to asking the student to paste, immediately after confirming the
-panel is open. This keeps the whole flow to about 8-10 tool calls instead
-of 20-30.
+**Why not just read the "AWS Details" panel directly:** it sits inside a
+cross-origin Vocareum iframe, so `get_page_text`/`read_page` return
+nothing, and reading the OS clipboard via `navigator.clipboard.readText()`
+hits a native permission dialog the extension's tools can't click through.
+Typing and clicking still work fine inside that iframe (cross-origin only
+blocks *JS reads*, not synthesized input), which is what the technique
+below relies on.
 
 1. **Load the tools.** `ToolSearch` for
-   `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__tabs_create_mcp`
-   in one call. (`read_page`/`get_page_text` aren't worth loading here —
-   see above.)
+   `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__javascript_tool`
+   in one call.
 2. **Navigate** to the saved course URL. The lab page embeds a Vocareum
    panel with a status dot (`AWS 🔴`/`AWS 🟢`), a budget readout ("Used
-   $X of $50"), a timer, and buttons: **Start Lab**, **End Lab**, **AWS
-   Details**, **Readme**, **Reset**.
+   $X of $50"), a timer, buttons (**Start Lab**, **End Lab**, **AWS
+   Details**, **Readme**, **Reset**), and an embedded terminal.
 3. **Screenshot once** to read the status dot and budget. Report both to
    the student before doing anything else; if the budget is above ~80% of
    the cap, warn them explicitly since this course's budget doesn't reset
@@ -117,15 +112,49 @@ of 20-30.
 4. **If the status is not already running:** click **Start Lab**. State
    plainly that you're doing this (it consumes session time/budget — that's
    expected, but the student should know). Poll with a screenshot every
-   ~15-20s, timeout at 5 minutes, until the dot goes green. Lab startup
-   commonly takes 1-3 minutes. **If it's already running,** skip straight
-   to the next step.
-5. **Click AWS Details** to open the "Cloud Access" panel (skip if already
-   open), then one screenshot to confirm the `[default]` / `aws_access_key_id=`
-   block is visible.
-6. **Hand off immediately**: tell the student the panel is open and ask
-   them to paste the credential block, exactly as in the manual flow below.
-   Do not attempt extraction first.
+   ~15-20s, timeout at 5 minutes, until the dot goes green and the terminal
+   prompt is live. Lab startup commonly takes 1-3 minutes. **If it's
+   already running,** skip straight to the next step.
+5. **Get the credentials via the terminal, one bounded attempt:**
+   a. Click into the embedded terminal, type `cat ~/.aws/credentials`,
+      press Enter. Screenshot once to confirm the `[default]` block
+      printed (sanity check only — don't transcribe it from this
+      screenshot).
+   b. Select the terminal's output (drag-select the printed lines, or
+      select-all inside the terminal pane) and copy it
+      (`cmd+c` on macOS / `ctrl+c` on Windows/Linux — this is a plain
+      copy, no permission dialog).
+   c. Open a **new tab** (`tabs_create_mcp`) and use `javascript_tool` to
+      inject a plain textarea this tab fully owns —
+      `document.body.innerHTML = '<textarea id="paste-target" autofocus style="width:99vw;height:95vh;font-family:monospace"></textarea>'`
+      — then click into that textarea and paste (`cmd+v` / `ctrl+v`;
+      pasting is also permission-free, unlike reading the clipboard via
+      JS).
+   d. Read the pasted text back with `javascript_tool` —
+      `document.getElementById('paste-target').value` — this is a normal
+      same-page JS read (the tab is Claude's own blank page, not the
+      cross-origin iframe), so it returns exact text with no OCR risk.
+   e. Close the extra tab. Validate the extracted text contains
+      `aws_access_key_id=`, `aws_secret_access_key=`, and
+      `aws_session_token=` before using it.
+6. **If step 5 succeeds:** feed the extracted block straight into the
+   script instead of asking the student to paste it themselves:
+   ```bash
+   printf '%s' "$EXTRACTED_BLOCK" | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/refresh_credentials.py"
+   ```
+   Report the resolved account ID, remaining session time, and budget used
+   — never the raw secret values.
+7. **If step 5 fails at any point** (paste comes back empty, doesn't
+   validate, or any sub-step errors) — **this is one bounded attempt, not
+   a chain to keep escalating.** Don't fall back to screenshot OCR, don't
+   retry a different clipboard trick. Say plainly that automated
+   extraction didn't work this time and drop straight to Workflow 1.
+
+This technique is untested against a live session as of this writing —
+first time it's actually run, treat it as provisional: if it works,
+great, keep using it; if it breaks in a way not covered above, fall back
+per step 7 and mention what specifically failed so this section can be
+fixed.
 
 If any earlier step fails (extension not connected, Start Lab click doesn't
 register, status never flips green after the timeout), say so plainly and

@@ -161,16 +161,25 @@ Plain Python 3 (stdlib only — no pip installs), shells out to
 - `claude plugin validate .` from the repo root checks `marketplace.json`
   and every plugin's `plugin.json`/skill frontmatter before you push.
 
-### Why credential capture is manual-paste-only, not fully browser-automated
+### Why credential capture is a bounded one-shot attempt, not naive retries
 
-Tested live: reading the AWS CLI credential block out of the AWS Academy
-page automatically doesn't work. The block renders inside a cross-origin
-Vocareum iframe (DOM/accessibility text extraction returns nothing),
-reading it via the OS clipboard hits a native permission dialog automation
-can't click through, and OCR-ing it from a screenshot risks silently
-swapping `0`/`O` in a 40-character secret. `aws-lab-ops` therefore only
-automates opening the page and clicking Start Lab; the student always
-pastes the credential block themselves.
+Tested live: reading the AWS CLI credential block directly off the "AWS
+Details" panel doesn't work — it renders inside a cross-origin Vocareum
+iframe (DOM/accessibility text extraction returns nothing), reading it via
+`navigator.clipboard.readText()` hits a native OS permission dialog
+automation can't click through, and OCR-ing it from a screenshot risks
+silently swapping `0`/`O` in a 40-character secret.
+
+`aws-lab-ops` works around this instead of giving up: type
+`cat ~/.aws/credentials` into the lab's own embedded terminal, copy the
+output with a keyboard shortcut (copying is permission-free, unlike
+reading the clipboard back via JS), paste it into a textarea on a blank
+tab Claude creates and fully owns, then read that textarea's value with a
+normal same-page JS call — no cross-origin restriction, no OCR. This is
+one bounded attempt; if any step in it fails, the skill drops straight to
+asking the student to paste the block themselves rather than escalating
+through more workarounds. As of this writing it hasn't been exercised
+against a live session yet, so treat early runs as provisional.
 
 There is a real alternative, but it needs your involvement: Vocareum (the
 platform behind AWS Academy Learner Lab) has an official REST API
