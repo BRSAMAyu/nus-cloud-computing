@@ -1,4 +1,4 @@
-# NUS Cloud Lab Toolkit — Claude Code plugin
+# nus-cloud-computing — Claude Code plugin
 
 A Claude Code plugin for the NUS cloud computing course: AWS Academy
 Learner Lab session/credential automation, EKS rebuild-from-scratch, a
@@ -15,12 +15,12 @@ specific lab checkout.
 Inside Claude Code:
 
 ```
-/plugin marketplace add <org>/nus-cloud-lab-toolkit
-/plugin install aws-academy-toolkit@nus-cloud-lab
+/plugin marketplace add <org>/nus-cloud-computing
+/plugin install aws-academy-toolkit@nus-cloud-computing
 ```
 
 Replace `<org>` with wherever this repo ends up hosted (e.g.
-`your-github-username/nus-cloud-lab-toolkit`). After installing, the three
+`your-github-username/nus-cloud-computing`). After installing, the three
 skills below are available in any directory you run `claude` in.
 
 ### Recommended: connect Claude in Chrome
