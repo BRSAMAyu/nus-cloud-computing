@@ -24,7 +24,7 @@ from pathlib import Path
 
 CONFIG_DIR = Path.home() / ".config" / "nus-cloud-computing"
 CONFIG_FILE = CONFIG_DIR / "config.json"
-KNOWN_KEYS = ("course_url", "language")
+KNOWN_KEYS = ("course_url", "language", "browser_assist")
 
 
 def _load() -> dict:

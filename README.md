@@ -47,9 +47,30 @@ then re-add with the HTTPS URL:
 ```
 
 After installing, the three skills below are available in any directory
-you run `claude` in. The first time you open Claude Code afterward, a
-one-time orientation message explains the three skills and first-run
-setup — it never repeats after that.
+you run `claude` in.
+
+### One shared onboarding, not three separate ones
+
+A single `SessionStart` hook (not each skill re-asking its own questions)
+handles session setup for all three skills at once:
+
+- **First session ever after install:** a short, one-time orientation
+  explaining the three skills — never shown again after that.
+- **Every session:** your saved course URL, language preference, and
+  browser-automation preference are loaded into context automatically, so
+  no skill needs to ask twice or re-check a config file mid-conversation.
+
+Three things get asked **once each**, the first time they're actually
+needed (not all up front):
+
+| Setting | Asked when | Remembered as |
+|---|---|---|
+| Course URL | first time you ask `aws-lab-ops` to start/refresh the lab | `course_url` |
+| Browser automation vs. manual paste | same — `aws-lab-ops` asks you to pick, doesn't silently guess | `browser_assist` |
+| Language | never asked — set it yourself only if you want consistency (see below) | `language` |
+
+All three live in `~/.config/nus-cloud-computing/config.json` — local to
+your machine, never committed anywhere, never shared between students.
 
 ### Language
 
@@ -64,21 +85,15 @@ python3 "<plugin path>/scripts/aws-lab/lab_config.py" set language zh
 
 (Ask Claude to run this for you — it'll resolve `<plugin path>` correctly.)
 
-### Recommended: connect Claude in Chrome
+### Browser automation vs. manual credential paste
 
 The `aws-lab-ops` skill can start/resume your AWS Academy lab session and
 pull fresh credentials directly out of the browser — no copy-pasting — if
 you have the **Claude in Chrome** extension installed and connected, and are
-already logged into Canvas/AWS Academy in that Chrome profile. Without it,
-the skill falls back to asking you to paste the credential block yourself;
-everything else works the same either way.
-
-### First-run: your course URL
-
-The first time you use `aws-lab-ops`, it'll ask for your course's "Launch
-AWS Academy Learner Lab" URL (the Canvas modules/items link). It's saved
-locally at `~/.config/nus-cloud-computing/config.json` — never committed
-anywhere, never shared between students.
+already logged into Canvas/AWS Academy in that Chrome profile. The first
+time you ask it to start/refresh the lab, it asks you which you'd prefer
+and remembers your answer — it never silently picks one for you. Either
+way works the same from there on.
 
 ## What's in the plugin
 
@@ -129,8 +144,8 @@ Plain Python 3 (stdlib only — no pip installs), shells out to
 | Script | Purpose |
 |---|---|
 | `common.py` | shared AWS CLI wrapper + retry/backoff helpers |
-| `lab_config.py` | stores the student's course URL and language preference locally |
-| `onboarding_hook.py` | SessionStart hook: shows the one-time orientation message, then never again |
+| `lab_config.py` | stores/reads course_url, language, and browser_assist locally |
+| `onboarding_hook.py` | SessionStart hook: one-time welcome + injects saved config every session for all 3 skills |
 | `refresh_credentials.py` | validates and writes a pasted/extracted credential block, verifies it |
 | `bootstrap_eks.py` | idempotently (re)creates `MyEKS` + `MyEKSGroup` + ECR repos from a bare account |
 | `verify_eks.py` | cross-platform health check (credentials, cluster, security group, kubectl, helm) |

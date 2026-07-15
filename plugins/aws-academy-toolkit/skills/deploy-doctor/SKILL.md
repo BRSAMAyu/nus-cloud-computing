@@ -99,7 +99,8 @@ installs only expose one of the two.
 
 ## Language
 
-Check `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get language`.
-If set, use that language for the whole review/fix conversation regardless
-of what language a given message is typed in; otherwise mirror the team's
-own language as usual.
+This student's saved `language` preference (if any) is already in this
+session's context, injected once by the shared `SessionStart` hook — no
+need to check it yourself. If set, use that language for the whole
+review/fix conversation regardless of what language a given message is
+typed in; otherwise mirror the team's own language as usual.

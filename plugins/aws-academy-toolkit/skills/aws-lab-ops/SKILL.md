@@ -45,44 +45,47 @@ location, not from inside the student's current project directory.
   account ID instead (`aws sts get-caller-identity`), which is all the
   student needs to sanity-check it's their own account.
 
-## First-run setup: the student's course URL
+## Session config (shared across all three skills)
 
-The AWS Academy session lives behind this course's Canvas module link,
-which is the same for the whole class but only resolves to a real lab once
-the student is logged into Canvas in their own browser. Check for it first:
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get course_url
-```
-
-If empty, ask the student to paste their course's "Launch AWS Academy
-Learner Lab" URL (the Canvas modules/items link they'd normally click), then
-save it:
+The `SessionStart` hook already loaded `course_url`, `language`, and
+`browser_assist` into this conversation's context before your first message
+— don't re-run `lab_config.py get` just to check them, that context block
+already has the answer. Only shell out to `lab_config.py` to **set** a new
+or changed value:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" set course_url "<url>"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" set language zh
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" set browser_assist true
 ```
 
-This is stored in the student's home directory
-(`~/.config/nus-cloud-computing/config.json`), never inside any git repo.
+If `course_url` is unset, ask the student to paste their course's "Launch
+AWS Academy Learner Lab" URL (the Canvas modules/items link) the first time
+you actually need it (i.e. when they ask to start/refresh the lab, not
+proactively out of nowhere), then save it — this only ever happens once per
+machine.
 
-## Language
+If `browser_assist` is unset, ask the student **once**, explicitly, which
+they'd prefer — don't silently pick one for them:
 
-Check `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get language`.
-If the student has set a preference (e.g. `zh` for Chinese), respond in that
-language throughout this skill regardless of what language a given message
-happens to be typed in. If nothing is set, just mirror the language the
-student writes to you in, as you normally would — no special handling
-needed. Never assume English by default; this course has students more
-comfortable in Chinese.
+> "Do you have the Claude in Chrome extension connected, and are you
+> logged into your AWS Academy course in that browser? If so I can drive
+> the browser to start your lab and pull credentials automatically. If
+> not, or you'd rather not, I'll just ask you to paste the credential
+> block yourself — both work fine."
 
-## Workflow 0 (primary) — browser-assisted start + credential refresh
+Save whichever they pick (`true`/`false`) so this is never asked again.
+Note this preference doesn't have to be perfectly reliable forever — if
+`browser_assist` is `true` but Claude in Chrome genuinely isn't connected in
+a given session, just say so and fall back to Workflow 1 for *that* session
+without changing the saved preference (it might be connected again next
+time).
+
+## Workflow 0 (primary, if browser_assist=true) — browser-assisted start + credential refresh
 
 Requires the student to have the **Claude in Chrome** extension installed
 and connected, already logged into Canvas (and, once redirected, Vocareum/AWS
-Academy) in that real Chrome profile. Check connectivity first — load and
-try the Claude in Chrome tools; if no connected browser is found, tell the
-student and fall back to Workflow 1.
+Academy) in that real Chrome profile.
 
 1. **Load the tools.** `ToolSearch` for
    `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__find,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__tabs_create_mcp`
@@ -128,7 +131,8 @@ guessing at values.
 
 ## Workflow 1 (fallback) — manual credential paste
 
-Use this when Claude in Chrome isn't available/connected, or Workflow 0
+Use this when `browser_assist` is `false`, or Claude in Chrome isn't
+actually connected this session despite the preference, or Workflow 0
 couldn't extract a valid block.
 
 1. Confirm the student has the lab started and "AWS Details" > "AWS CLI"

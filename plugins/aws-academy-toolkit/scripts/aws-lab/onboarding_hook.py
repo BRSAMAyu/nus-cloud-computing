@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""SessionStart hook: show a one-time orientation message the first time a
-student opens Claude Code after installing this plugin, then never again.
+"""SessionStart hook: the one shared place all three skills get their
+session-level context from, instead of each skill re-implementing its own
+"check the config, ask the student, explain myself" logic.
 
-Runs on every session (that's how SessionStart works), so it must stay fast
-and silent after the first run: a marker file in the plugin's persistent
-data directory (${CLAUDE_PLUGIN_DATA}, survives updates/reinstalls) records
-that onboarding already happened.
+Two things happen here, every session:
 
-Per Claude Code's SessionStart contract, printing a JSON object with
-hookSpecificOutput.additionalContext injects that text into the model's
-context before the first prompt; printing nothing (and exiting 0) does
-nothing, which is what every session after the first should do.
+1. Once ever (gated by a marker file in ${CLAUDE_PLUGIN_DATA}): inject a
+   short orientation explaining the three skills exist and how first-run
+   setup works. Never repeats after that.
+2. Every session, cheaply: inject whatever the student already has saved
+   (course_url, language, browser_assist) as plain context, so no skill
+   needs to shell out to lab_config.py just to check — it's already in
+   context by the time the student's first message arrives. This is also
+   what makes language/course-URL/browser-automation preferences apply
+   uniformly across all three skills without each one repeating the same
+   instructions.
 """
 
 from __future__ import annotations
@@ -19,6 +23,9 @@ import json
 import os
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lab_config import get_value  # noqa: E402
 
 MARKER_NAME = "onboarded.marker"
 
@@ -34,16 +41,9 @@ one-time orientation — not a wall of text — covering:
    labs), and `deploy-doctor` (checks whether a group project will deploy
    to this course's EKS). They don't need to invoke these explicitly by
    name — just describe what they need and the right one activates.
-2. First-run setup for `aws-lab-ops`: it will ask for their AWS Academy
-   course URL once (stored locally, never shared).
-3. If they have the Claude in Chrome extension connected and are already
-   logged into their course page, credential refresh can be fully
-   automatic; otherwise it'll ask them to paste the credential block
-   manually — both work fine.
-4. They can set a language preference (e.g. Chinese) if they'd rather all
-   three skills consistently respond in a language other than whatever
-   they happen to type in a given message — mention this only briefly,
-   as an option, not a requirement.
+2. Saved settings (course URL, language, browser-automation preference —
+   see the "Saved session config" block also in this context) persist
+   across every future session, so first-run questions only happen once.
 
 Keep this brief and skip it entirely if it would be redundant with
 whatever the student's actual first message already makes obvious.
@@ -56,26 +56,50 @@ def marker_path() -> Path:
     return base / MARKER_NAME
 
 
+def describe(key: str, value: str | None, unset_hint: str) -> str:
+    return f"- {key}: {value!r}" if value else f"- {key}: not set — {unset_hint}"
+
+
+def build_config_block() -> str:
+    course_url = get_value("course_url")
+    language = get_value("language")
+    browser_assist = get_value("browser_assist")
+    lines = [
+        "Saved session config for this student (already loaded — do not "
+        "re-run lab_config.py just to check these; only re-run it to change "
+        "a value):",
+        describe("course_url", course_url,
+                 "aws-lab-ops will ask for it the first time it's needed"),
+        describe("language", language,
+                 "mirror whatever language the student writes in, as usual"),
+        describe("browser_assist", browser_assist,
+                 "aws-lab-ops will ask once whether to try Claude-in-Chrome "
+                 "browser automation or use manual credential paste, then "
+                 "remember the answer"),
+    ]
+    return "\n".join(lines)
+
+
 def main() -> None:
     marker = marker_path()
-    if marker.exists():
-        # Already onboarded on this machine — stay silent and fast.
-        return
+    parts = [build_config_block()]
+    first_run = not marker.exists()
+    if first_run:
+        parts.insert(0, WELCOME)
 
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
-            "additionalContext": WELCOME,
+            "additionalContext": "\n\n".join(parts),
         }
     }))
 
-    try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text("onboarded\n")
-    except OSError:
-        # If we can't persist the marker, better to onboard again next
-        # session than to crash the hook.
-        pass
+    if first_run:
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("onboarded\n")
+        except OSError:
+            pass  # better to show the welcome again than crash the hook
 
 
 if __name__ == "__main__":

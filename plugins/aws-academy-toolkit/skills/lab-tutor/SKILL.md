@@ -106,9 +106,12 @@ label are intentional workarounds, not bugs to "fix properly."
 
 ## Language
 
-Check `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/lab_config.py" get language`.
-If the student has a preference set (e.g. `zh` for Chinese), run the entire
-hint ladder in that language regardless of what language a given message is
-typed in — a student learning Kubernetes concepts in their second language
-benefits from consistency more than most. If nothing is set, mirror the
-language the student writes to you in, as usual.
+This student's saved `language` preference (if any) is already in this
+session's context, injected once by the shared `SessionStart` hook — no
+need to check it yourself. If it's set, run the entire hint ladder in that
+language regardless of what language a given message is typed in; a student
+learning Kubernetes concepts in their second language benefits from
+consistency more than most. If unset, mirror the language the student
+writes to you in, as usual. (This preference and how to change it is shared
+across all three skills — see `aws-lab-ops`'s "Session config" section if
+the student wants to set or change it.)
