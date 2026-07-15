@@ -1,0 +1,15 @@
+{
+  "name": "nus-cloud-lab",
+  "owner": {
+    "name": "NUS Cloud Computing Lab"
+  },
+  "description": "Tooling for the NUS cloud computing course: AWS Academy Learner Lab automation, a Socratic tutor for the L1-L4 Kubernetes labs, and an EKS deployment checker for group projects.",
+  "plugins": [
+    {
+      "name": "aws-academy-toolkit",
+      "source": "./plugins/aws-academy-toolkit",
+      "description": "AWS Academy Learner Lab session/credential automation + EKS rebuild, Socratic lab tutor, and group-project EKS compatibility checker.",
+      "version": "1.0.0"
+    }
+  ]
+}
