@@ -160,3 +160,27 @@ Plain Python 3 (stdlib only — no pip installs), shells out to
   auto-update skip a plugin whose resolved version hasn't changed.
 - `claude plugin validate .` from the repo root checks `marketplace.json`
   and every plugin's `plugin.json`/skill frontmatter before you push.
+
+### Why credential capture is manual-paste-only, not fully browser-automated
+
+Tested live: reading the AWS CLI credential block out of the AWS Academy
+page automatically doesn't work. The block renders inside a cross-origin
+Vocareum iframe (DOM/accessibility text extraction returns nothing),
+reading it via the OS clipboard hits a native permission dialog automation
+can't click through, and OCR-ing it from a screenshot risks silently
+swapping `0`/`O` in a 40-character secret. `aws-lab-ops` therefore only
+automates opening the page and clicking Start Lab; the student always
+pastes the credential block themselves.
+
+There is a real alternative, but it needs your involvement: Vocareum (the
+platform behind AWS Academy Learner Lab) has an official REST API
+(`https://api.vocareum.com/api/v2/`) with an endpoint
+(`courses/{courseId}/assignments/{assignmentId}/parts/{partId}/resources/{userId}`)
+that returns a user's lab credentials and can start/extend their session —
+no browser needed at all. Generating a personal access token for it is
+restricted to Vocareum **Organization Admins** (Settings → Personal Access
+Tokens), so individual students can't self-serve one. If you're willing to
+generate and distribute per-student tokens as the course's org admin, this
+API would fully replace the browser-automation path — far more reliable
+and near-zero token cost — but that's course-infrastructure work only you
+can do, not something this plugin can set up unilaterally.

@@ -34,8 +34,10 @@ location, not from inside the student's current project directory.
 - The browser actions that ARE fine, because they're routine session
   management on a browser the student is already authenticated in, not
   authentication itself: navigating to the course's AWS Academy page,
-  clicking **Start Lab**, clicking **AWS Details**, and reading the
-  already-displayed temporary credential block off the page.
+  clicking **Start Lab**, and clicking **AWS Details** to open the panel.
+  Reading the credential text back out of that panel is the student's job
+  (see Workflow 0's note on why automated extraction doesn't work
+  reliably here), not something this skill attempts.
 - The only secrets this skill ever handles are the short-lived
   `aws_access_key_id` / `aws_secret_access_key` / `aws_session_token`
   triple AWS Academy itself displays to an already-logged-in student — never
@@ -66,13 +68,16 @@ proactively out of nowhere), then save it — this only ever happens once per
 machine.
 
 If `browser_assist` is unset, ask the student **once**, explicitly, which
-they'd prefer — don't silently pick one for them:
+they'd prefer — don't silently pick one for them. Be accurate about what it
+does and doesn't cover — pulling the credential text out automatically
+doesn't work reliably (see Workflow 0's note), so don't oversell it:
 
 > "Do you have the Claude in Chrome extension connected, and are you
-> logged into your AWS Academy course in that browser? If so I can drive
-> the browser to start your lab and pull credentials automatically. If
-> not, or you'd rather not, I'll just ask you to paste the credential
-> block yourself — both work fine."
+> logged into your AWS Academy course in that browser? If so I can open
+> the page and click Start Lab for you — you'll still need to paste the
+> credential block yourself once it's ready, that part can't be automated
+> reliably. If you'd rather just do the whole thing yourself in your own
+> browser, that's fine too."
 
 Save whichever they pick (`true`/`false`) so this is never asked again.
 Note this preference doesn't have to be perfectly reliable forever — if
@@ -83,61 +88,57 @@ time).
 
 ## Workflow 0 (primary, if browser_assist=true) — browser-assisted start + credential refresh
 
-Requires the student to have the **Claude in Chrome** extension installed
-and connected, already logged into Canvas (and, once redirected, Vocareum/AWS
-Academy) in that real Chrome profile.
+**Scope of automation, deliberately narrow:** browser automation handles
+starting/resuming the lab session and getting the "AWS Details" panel open
+— it does **not** attempt to extract the credential text itself. That split
+is based on real testing, not caution for its own sake: the credential
+block sits inside a cross-origin Vocareum iframe, so DOM/accessibility text
+extraction (`get_page_text`, `read_page`) returns nothing; reading it via
+the OS clipboard hits a native permission dialog the extension's tools
+can't click through; and reading it off a screenshot risks silently
+swapping `0`/`O` or `1`/`l`/`I` in a 40-character secret, which is a
+correctness bug, not just a UX papercut. Don't re-attempt any of these — go
+straight to asking the student to paste, immediately after confirming the
+panel is open. This keeps the whole flow to about 8-10 tool calls instead
+of 20-30.
 
 1. **Load the tools.** `ToolSearch` for
-   `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__find,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__tabs_create_mcp`
-   in one call.
+   `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__tabs_create_mcp`
+   in one call. (`read_page`/`get_page_text` aren't worth loading here —
+   see above.)
 2. **Navigate** to the saved course URL. The lab page embeds a Vocareum
    panel with a status dot (`AWS 🔴`/`AWS 🟢`), a budget readout ("Used
    $X of $50"), a timer, and buttons: **Start Lab**, **End Lab**, **AWS
    Details**, **Readme**, **Reset**.
-3. **Read the page** (`read_page` or `find` for "Start Lab button" / status
-   indicator) rather than assuming fixed coordinates — course page layout
-   can shift. Report the current budget/status to the student before doing
-   anything else; if the budget is above ~80% of the cap, warn them
-   explicitly since this course's budget doesn't reset on session restart.
+3. **Screenshot once** to read the status dot and budget. Report both to
+   the student before doing anything else; if the budget is above ~80% of
+   the cap, warn them explicitly since this course's budget doesn't reset
+   on session restart.
 4. **If the status is not already running:** click **Start Lab**. State
    plainly that you're doing this (it consumes session time/budget — that's
-   expected, but the student should know). Poll — re-`read_page` every
-   ~15-20s, timeout at 5 minutes — until the status flips to running. Lab
-   startup commonly takes 1-3 minutes.
-   **If it's already running,** skip straight to the next step.
-5. **Click AWS Details** to open the "Cloud Access" panel (skip if it's
-   already open/visible). Locate the "AWS CLI" credential block — a
-   monospace block starting with `[default]` followed by
-   `aws_access_key_id=`, `aws_secret_access_key=`, `aws_session_token=`.
-6. **Extract the text**, preferring `get_page_text` or `read_page` (actual
-   DOM/accessibility text) over reading a screenshot — a screenshot risks a
-   single mistranscribed character silently breaking the credentials, which
-   `get_page_text`/`read_page` don't. Only fall back to a screenshot if both
-   fail, and if you do, tell the student to double-check by falling back to
-   Workflow 1 instead of trusting the transcription.
-7. **Write it to disk and verify**, reusing the same validated path the
-   manual flow uses — pipe the extracted block into the script rather than
-   asking the student to paste it themselves:
-   ```bash
-   printf '%s' "$EXTRACTED_BLOCK" | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/refresh_credentials.py"
-   ```
-8. **Report** the resolved account ID, remaining session time, and budget
-   used — not the raw secret values.
+   expected, but the student should know). Poll with a screenshot every
+   ~15-20s, timeout at 5 minutes, until the dot goes green. Lab startup
+   commonly takes 1-3 minutes. **If it's already running,** skip straight
+   to the next step.
+5. **Click AWS Details** to open the "Cloud Access" panel (skip if already
+   open), then one screenshot to confirm the `[default]` / `aws_access_key_id=`
+   block is visible.
+6. **Hand off immediately**: tell the student the panel is open and ask
+   them to paste the credential block, exactly as in the manual flow below.
+   Do not attempt extraction first.
 
-If any step fails (extension not connected, elements not found after a
-couple of `read_page` retries, credential block doesn't validate), say so
-plainly and drop to Workflow 1 rather than silently retrying forever or
-guessing at values.
+If any earlier step fails (extension not connected, Start Lab click doesn't
+register, status never flips green after the timeout), say so plainly and
+drop to manual paste for the whole thing rather than retrying indefinitely.
 
-## Workflow 1 (fallback) — manual credential paste
+## Workflow 1 — get the credentials into `~/.aws/credentials`
 
-Use this when `browser_assist` is `false`, or Claude in Chrome isn't
-actually connected this session despite the preference, or Workflow 0
-couldn't extract a valid block.
+This step is the same regardless of whether Workflow 0 automated the
+lab-start part or the student did it themselves in their own browser —
+credential capture is always a manual paste, for the reasons above.
 
-1. Confirm the student has the lab started and "AWS Details" > "AWS CLI"
-   open in their own browser (any browser — no extension needed for this
-   path).
+1. Confirm the student has the lab running and "AWS Details" > "AWS CLI"
+   open (in whichever browser — no extension needed for this step).
 2. Ask them to paste the full credential block into the chat.
 3. ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/aws-lab/refresh_credentials.py"
@@ -146,7 +147,21 @@ couldn't extract a valid block.
    pass the path as an argument). The script validates the block, backs up
    any existing `~/.aws/credentials`, writes the new one, and confirms with
    `aws sts get-caller-identity`.
-4. Report the resolved account ID.
+4. Report the resolved account ID — not the raw secret values.
+
+## Is there an official API instead of the browser entirely?
+
+Checked: Vocareum (the platform behind AWS Academy Learner Lab) does have
+an official REST API with an endpoint that returns a user's lab session
+credentials and can start/extend the session
+(`courses/{courseId}/assignments/{assignmentId}/parts/{partId}/resources/{userId}`).
+It is **not usable here**: generating a personal access token for it is
+restricted to Vocareum Organization Admins in account Settings — individual
+students have no self-service way to get one. If the course's teaching
+staff ever want to issue per-student tokens themselves, this API would
+replace browser automation entirely (far more reliable, near-zero token
+cost) — that's a course-infrastructure decision for them, not something
+this skill can set up on its own.
 
 ## Workflow 2 — rebuild MyEKS from scratch (after a budget-exhausted account reset)
 
