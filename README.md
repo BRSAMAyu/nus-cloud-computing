@@ -26,8 +26,24 @@ specific lab checkout.
 Inside Claude Code:
 
 ```
-/plugin marketplace add BRSAMAyu/nus-cloud-computing
+/plugin marketplace add https://github.com/BRSAMAyu/nus-cloud-computing.git
 /plugin install aws-academy-toolkit@nus-cloud-computing
+```
+
+Use the full `https://...git` URL, not the `owner/repo` shorthand. The
+shorthand form lets Claude Code choose SSH or HTTPS based on your local git
+config, and on a machine that has `insteadOf` rewrites (or `gh auth
+setup-git`) configured for SSH, it clones over SSH — and fails with
+`Permission denied (publickey)` if you don't have a GitHub SSH key set up.
+The explicit HTTPS URL always works with no GitHub auth at all, since this
+repo is public.
+
+If you already hit the SSH error, remove the half-added marketplace first,
+then re-add with the HTTPS URL:
+
+```
+/plugin marketplace remove nus-cloud-computing
+/plugin marketplace add https://github.com/BRSAMAyu/nus-cloud-computing.git
 ```
 
 After installing, the three skills below are available in any directory
