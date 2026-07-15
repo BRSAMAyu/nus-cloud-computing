@@ -26,13 +26,12 @@ specific lab checkout.
 Inside Claude Code:
 
 ```
-/plugin marketplace add <org>/nus-cloud-computing
+/plugin marketplace add BRSAMAyu/nus-cloud-computing
 /plugin install aws-academy-toolkit@nus-cloud-computing
 ```
 
-Replace `<org>` with wherever this repo ends up hosted (e.g.
-`your-github-username/nus-cloud-computing`). After installing, the three
-skills below are available in any directory you run `claude` in.
+After installing, the three skills below are available in any directory
+you run `claude` in.
 
 ### Recommended: connect Claude in Chrome
 
